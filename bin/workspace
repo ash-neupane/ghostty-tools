@@ -1,0 +1,126 @@
+#!/bin/bash
+# workspace - 3-pane tmux workspace manager (Claude | Neovim / Terminal)
+
+WORKSPACE_DIR="$HOME/.local/share/workspace"
+mkdir -p "$WORKSPACE_DIR"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  workspace <name> [path]    Create or attach to a workspace
+  workspace ls               List active workspaces
+  workspace ls -la           List all workspaces (including hidden)
+  workspace rm <name>        Kill and remove a workspace
+  workspace hide <name>      Hide a workspace (detach + hide from ls)
+EOF
+}
+
+cmd_ls() {
+    local show_hidden=false
+    [[ "$1" == "-la" ]] && show_hidden=true
+
+    local sessions
+    sessions=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | grep "^ws-" | sed 's/^ws-//')
+
+    if [[ -z "$sessions" && "$show_hidden" == false ]]; then
+        echo "No active workspaces."
+        return
+    fi
+
+    if [[ -n "$sessions" ]]; then
+        echo "Active:"
+        while read -r name; do
+            local dir="(unknown)"
+            [[ -f "$WORKSPACE_DIR/$name" ]] && dir=$(cat "$WORKSPACE_DIR/$name")
+            echo "  $name  →  $dir"
+        done <<< "$sessions"
+    fi
+
+    if [[ "$show_hidden" == true ]]; then
+        local has_hidden=false
+        for f in "$WORKSPACE_DIR"/.hidden-*; do
+            [[ -f "$f" ]] || continue
+            if [[ "$has_hidden" == false ]]; then
+                echo ""
+                echo "Hidden:"
+                has_hidden=true
+            fi
+            local name=$(basename "$f" | sed 's/^\.hidden-//')
+            local dir=$(cat "$f")
+            echo "  $name  →  $dir"
+        done
+    fi
+}
+
+cmd_rm() {
+    local name="$1"
+    [[ -z "$name" ]] && echo "Usage: workspace rm <name>" && return 1
+    tmux kill-session -t "ws-$name" 2>/dev/null
+    rm -f "$WORKSPACE_DIR/$name" "$WORKSPACE_DIR/.hidden-$name"
+    echo "Removed: $name"
+}
+
+cmd_hide() {
+    local name="$1"
+    [[ -z "$name" ]] && echo "Usage: workspace hide <name>" && return 1
+
+    if [[ ! -f "$WORKSPACE_DIR/$name" ]]; then
+        echo "Workspace '$name' not found."
+        return 1
+    fi
+
+    mv "$WORKSPACE_DIR/$name" "$WORKSPACE_DIR/.hidden-$name"
+    tmux kill-session -t "ws-$name" 2>/dev/null
+    echo "Hidden: $name"
+}
+
+cmd_create() {
+    local name="$1"
+    local dir="$2"
+    local session="ws-$name"
+
+    # Reattach if session exists
+    if tmux has-session -t "$session" 2>/dev/null; then
+        tmux attach -t "$session"
+        return
+    fi
+
+    # Restore hidden workspace
+    if [[ -z "$dir" && -f "$WORKSPACE_DIR/.hidden-$name" ]]; then
+        dir=$(cat "$WORKSPACE_DIR/.hidden-$name")
+        mv "$WORKSPACE_DIR/.hidden-$name" "$WORKSPACE_DIR/$name"
+    fi
+
+    # Resolve directory
+    if [[ -z "$dir" && -f "$WORKSPACE_DIR/$name" ]]; then
+        dir=$(cat "$WORKSPACE_DIR/$name")
+    elif [[ -z "$dir" ]]; then
+        dir="$(pwd)"
+    fi
+
+    dir=$(eval echo "$dir")
+
+    if [[ ! -d "$dir" ]]; then
+        echo "Directory not found: $dir"
+        return 1
+    fi
+
+    echo "$dir" > "$WORKSPACE_DIR/$name"
+
+    tmux new-session -d -s "$session" -c "$dir" -x "$(tput cols)" -y "$(tput lines)"
+    tmux send-keys -t "$session" "claude" Enter
+    tmux split-window -h -t "$session" -c "$dir"
+    tmux send-keys -t "$session" "nvim" Enter
+    tmux split-window -v -t "$session" -c "$dir"
+    tmux select-pane -t "$session:.0"
+    tmux attach -t "$session"
+}
+
+case "$1" in
+    ls)         cmd_ls "$2" ;;
+    rm)         cmd_rm "$2" ;;
+    hide)       cmd_hide "$2" ;;
+    -h|--help)  usage ;;
+    "")         usage ;;
+    *)          cmd_create "$1" "$2" ;;
+esac
