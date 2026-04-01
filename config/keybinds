@@ -1,0 +1,3 @@
+# Tab cycling with Cmd + ` (circular)
+keybind = super+grave_accent=next_tab
+keybind = super+shift+grave_accent=previous_tab
