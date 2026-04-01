@@ -108,9 +108,9 @@ cmd_create() {
     echo "$dir" > "$WORKSPACE_DIR/$name"
 
     tmux new-session -d -s "$session" -c "$dir" -x "$(tput cols)" -y "$(tput lines)"
-    tmux send-keys -t "$session" "claude" Enter
+    tmux send-keys -t "$session" "claude --dangerously-skip-permissions --continue" Enter
     tmux split-window -h -t "$session" -c "$dir"
-    tmux send-keys -t "$session" "nvim" Enter
+    tmux send-keys -t "$session" "vim" Enter
     tmux split-window -v -t "$session" -c "$dir"
     tmux select-pane -t "$session:.0"
     tmux attach -t "$session"
