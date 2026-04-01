@@ -1,0 +1,28 @@
+#!/bin/bash
+# install-keybinds - Append ghostty-tools keybinds to Ghostty config
+
+GHOSTTY_CONFIG="$HOME/.config/ghostty/config"
+KEYBINDS_FILE="$(dirname "$0")/../config/keybinds"
+MARKER="# ghostty-tools keybinds"
+
+if ! [[ -f "$KEYBINDS_FILE" ]]; then
+    echo "Keybinds file not found: $KEYBINDS_FILE"
+    exit 1
+fi
+
+mkdir -p "$(dirname "$GHOSTTY_CONFIG")"
+
+if grep -qF "$MARKER" "$GHOSTTY_CONFIG" 2>/dev/null; then
+    echo "Keybinds already installed. Remove the '$MARKER' block from $GHOSTTY_CONFIG to reinstall."
+    exit 0
+fi
+
+{
+    echo ""
+    echo "$MARKER"
+    cat "$KEYBINDS_FILE"
+    echo "# end ghostty-tools keybinds"
+} >> "$GHOSTTY_CONFIG"
+
+echo "Keybinds installed to $GHOSTTY_CONFIG"
+echo "Restart Ghostty to apply."
